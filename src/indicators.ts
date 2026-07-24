@@ -279,15 +279,11 @@ export function ttmSqueeze(
       const cur = out.momentum[i] as number
       if (cur > prev) out.histogramColor[i] = cur >= 0 ? 'green' : 'red'
       else out.histogramColor[i] = 'gray'
-    } else {
-      out.histogramColor[i] = cur_color(cur as number)
+    } else if (out.momentum[i] != null) {
+      out.histogramColor[i] = out.momentum[i] as number >= 0 ? 'green' : 'red'
     }
   }
   return out
-}
-
-function cur_color(v: number): 'green' | 'red' | 'gray' {
-  return v >= 0 ? 'green' : 'red'
 }
 
 // ─── Renko ───────────────────────────────────────────────────────────────────
