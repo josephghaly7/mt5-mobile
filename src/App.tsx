@@ -8,12 +8,14 @@ interface SymbolInfo {
   display: string
 }
 
-// The mobile app resolves its API base at runtime:
-// - When opened from GitHub Pages (josephghaly7.github.io), the user must
-//   paste the tunnel URL in Settings — different origin from the API.
-// - When opened from anywhere else (FastAPI via tunnel, dev server, LAN),
-//   the page origin IS the API base, so we default to it automatically.
+// API base resolution priority:
+//   1. localStorage override (user typed one in Settings — sticks)
+//   2. Tunnel auto-discovery: fetch tunnel.json from same path (GitHub Pages
+//      deploys this on each cloudflared restart — VM publish-tunnel.sh keeps
+//      it fresh). Only used when on github.io.
+//   3. Page origin (FastAPI via tunnel, dev server, LAN)
 const STORAGE_KEY_API = 'mt5-mobile.apiBase'
+const STORAGE_KEY_API_DISCOVERED = 'mt5-mobile.apiBaseDiscovered'
 const STORAGE_KEY_SYMBOL = 'mt5-mobile.symbol'
 const STORAGE_KEY_INDICATORS = 'mt5-mobile.indicators'
 
@@ -21,9 +23,10 @@ function defaultApiBase(): string {
   if (typeof window === 'undefined') return ''
   const override = localStorage.getItem(STORAGE_KEY_API)
   if (override) return override
-  // GitHub Pages: apiBase must be the tunnel URL (user sets it)
+  // Cached discovered tunnel from a previous visit — survives page reloads
+  const cached = localStorage.getItem(STORAGE_KEY_API_DISCOVERED)
+  if (cached) return cached
   if (window.location.host.endsWith('.github.io')) return ''
-  // Otherwise: use page origin as the API base
   return window.location.origin
 }
 
@@ -58,7 +61,9 @@ export default function App() {
   // Persist user choices
   useEffect(() => localStorage.setItem(STORAGE_KEY_SYMBOL, active), [active])
   useEffect(() => localStorage.setItem(STORAGE_KEY_INDICATORS, JSON.stringify(indicators)), [indicators])
-  useEffect(() => localStorage.setItem(STORAGE_KEY_API, apiBase), [apiBase])
+  // Don't auto-persist apiBase here. The override (typed in Settings) IS
+  // persisted on every keystroke. Tunnel-discovered URLs are cached under
+  // STORAGE_KEY_API_DISCOVERED and refreshed by the discover effect below.
 
   // Service worker update toast
   useEffect(() => {
@@ -86,6 +91,37 @@ export default function App() {
     requestLock()
     document.addEventListener('visibilitychange', onVisibility)
     return () => { releaseLock(); document.removeEventListener('visibilitychange', onVisibility) }
+  }, [])
+
+  // Tunnel auto-discovery: on GitHub Pages, fetch tunnel.json from the same
+  // path. The publish-tunnel.sh script on the VM keeps that file in sync
+  // with the current trycloudflare URL. We poll every 5 min so URL rotations
+  // propagate without a page reload. User override (if any) wins.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (localStorage.getItem(STORAGE_KEY_API)) return  // user override present
+    if (!window.location.host.endsWith('.github.io')) return  // served from FastAPI, no need
+    let cancelled = false
+
+    const discover = async () => {
+      try {
+        // Relative URL so it resolves against whatever base path the PWA was
+        // served from (GH Pages: /mt5-mobile/tunnel.json, FastAPI: /tunnel.json).
+        const r = await fetch(`tunnel.json?t=${Date.now()}`, { cache: 'no-store' })
+        if (!r.ok) return
+        const data = await r.json()
+        if (cancelled || !data?.url) return
+        const discovered = data.url as string
+        localStorage.setItem(STORAGE_KEY_API_DISCOVERED, discovered)
+        setApiBase(prev => prev === discovered ? prev : discovered)
+      } catch {
+        // Network blip or GH Pages rate limit; keep the cached value
+      }
+    }
+
+    discover()
+    const id = setInterval(discover, 5 * 60 * 1000)  // 5 min
+    return () => { cancelled = true; clearInterval(id) }
   }, [])
 
   // Initial history fetch — last N bars from FastAPI /api/bars
@@ -226,15 +262,38 @@ export default function App() {
                 type="text"
                 placeholder="https://your-tunnel.trycloudflare.com"
                 value={apiBase}
-                onChange={e => setApiBase(e.target.value)}
+                onChange={e => {
+                  const v = e.target.value
+                  setApiBase(v)
+                  if (v.trim()) {
+                    localStorage.setItem(STORAGE_KEY_API, v.trim())
+                    localStorage.removeItem(STORAGE_KEY_API_DISCOVERED)
+                  } else {
+                    localStorage.removeItem(STORAGE_KEY_API)
+                  }
+                }}
               />
             </label>
             <p className="hint">
-              Leave empty for local use. For GitHub Pages access, paste the
-              Cloudflare Tunnel URL exposed by <code>cloudflared tunnel --url http://localhost:5558</code>
-              on the VM.
+              On GitHub Pages the tunnel URL is auto-discovered and refreshed
+              every 5 min (the VM publishes to <code>tunnel.json</code> on every
+              cloudflared restart). Tap below to override or reset to auto.
             </p>
-            <button onClick={() => setShowSettings(false)} className="primary">Done</button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => {
+                  localStorage.removeItem(STORAGE_KEY_API)
+                  localStorage.removeItem(STORAGE_KEY_API_DISCOVERED)
+                  setApiBase('')
+                  location.reload()
+                }}
+                className="primary"
+                style={{ background: '#2a2e39' }}
+              >
+                Use auto-discovery
+              </button>
+              <button onClick={() => setShowSettings(false)} className="primary">Done</button>
+            </div>
           </div>
         </div>
       )}
