@@ -115,12 +115,10 @@ export function Chart({ bars, chartType, renkoBox, indicators }: Props) {
 
     if (chartType === 'renko') {
       const bricks = buildRenko(bars, renkoBox)
-      // Lightweight-charts requires unique timestamps per series. Renko can
-      // emit multiple bricks per minute, so we use a synthetic sequential
-      // time index (1, 2, 3...) instead of bar.time. This loses the wall-clock
-      // time scale (use candles for that) but keeps the bricks aligned.
-      candleRef.current.setData(bricks.map((b, i) => ({
-        time: i as any,  // numeric index, no duplicates possible
+      // Brick times use real wall-clock seconds (with second-level offsets
+      // when multiple bricks emit from one bar — see indicators.ts buildRenko).
+      candleRef.current.setData(bricks.map(b => ({
+        time: b.time as UTCTimestamp,
         open: b.open, high: b.high, low: b.low, close: b.close
       })))
       volumeRef.current.setData([])
@@ -209,13 +207,11 @@ export function Chart({ bars, chartType, renkoBox, indicators }: Props) {
       s.setData(data)
     } else remove('vwap')
 
-    // StochRSI and TTM Squeeze require real OHLC bars (not Renko bricks).
-    // When chartType === 'renko', skip them — they don't make sense on a
-    // brick chart. The chip toggles stay active in state so flipping back
-    // to candles restores the panes immediately.
-    const supportsOscillators = chartType === 'candles'
-
-    if (supportsOscillators && indicators.stochRSI) {
+    // StochRSI and TTM Squeeze compute from the source bars (not the
+    // Renko bricks), so they work in both modes. Time values come from
+    // the original bars array, which is consistent with the brick times
+    // since bricks share their source bar's wall-clock time.
+    if (indicators.stochRSI) {
       const kSeries = ensure('stochK', () => {
         const s = chart.addLineSeries({
           color: COLORS.stochK, lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
@@ -246,7 +242,7 @@ export function Chart({ bars, chartType, renkoBox, indicators }: Props) {
       remove('stochK'); remove('stochD')
     }
 
-    if (supportsOscillators && indicators.ttmSqueeze) {
+    if (indicators.ttmSqueeze) {
       const ttm = ttmSqueeze(bars, 20, 2, 20, 1.5, 20)
       // Three separate histogram series so each can have its own color
       const green = ensure('ttmGreen', () => chart.addHistogramSeries({

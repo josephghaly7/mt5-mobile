@@ -303,14 +303,17 @@ export interface RenkoBrick {
 // brick's close. Wicks are ignored — pure brick open/close.
 // Reversal: if price moves >= 2*boxSize in the opposite direction, emit
 // two bricks (reversal convention matches the desktop).
+// Time assignment matches the desktop mt5-api Renko builder: each brick
+// keeps the source bar's wall-clock time. When multiple bricks are emitted
+// from the same bar, brick `b` gets `bar.time + b` seconds so the time
+// axis remains monotonic without duplicates (LWC requires unique times).
 export function buildRenko(bars: Bar[], boxSize: number): RenkoBrick[] {
   const out: RenkoBrick[] = []
   if (bars.length === 0 || boxSize <= 0) return out
-  let lastClose = bars[0].close
-  // Snap initial brick close to the nearest box grid
-  lastClose = Math.round(lastClose / boxSize) * boxSize
+  let lastClose = Math.round(bars[0].close / boxSize) * boxSize
+  let nextTime = bars[0].time
   out.push({
-    time: bars[0].time,
+    time: nextTime,
     open: lastClose,
     high: lastClose + boxSize,
     low: lastClose - boxSize,
@@ -319,21 +322,27 @@ export function buildRenko(bars: Bar[], boxSize: number): RenkoBrick[] {
   })
 
   for (let i = 1; i < bars.length; i++) {
-    const price = bars[i].close
+    const bar = bars[i]
+    const price = bar.close
     let delta = price - lastClose
+    let b = 0  // brick count from this bar
     while (Math.abs(delta) >= boxSize) {
       const stepDir = delta > 0 ? 'up' : 'down'
       const newClose = lastClose + (delta > 0 ? boxSize : -boxSize)
+      // Strictly monotonic: time >= previous brick's time AND time > bar.time
+      // so bricks from the same bar are sequential within that minute.
+      nextTime = Math.max(bar.time + b, nextTime + 1)
       out.push({
-        time: bars[i].time,
+        time: nextTime,
         open: lastClose,
         close: newClose,
-        high: Math.max(lastClose, newClose) + boxSize,  // wick allowance
+        high: Math.max(lastClose, newClose) + boxSize,
         low: Math.min(lastClose, newClose) - boxSize,
         direction: stepDir,
       })
       lastClose = newClose
       delta = price - lastClose
+      b++
     }
   }
   return out
