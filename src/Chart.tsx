@@ -207,9 +207,13 @@ export function Chart({ bars, chartType, renkoBox, indicators }: Props) {
       s.setData(data)
     } else remove('vwap')
 
-    // StochRSI — separate sub-pane at bottom (15-35% of chart height).
-    // We use a dedicated price scale so it doesn't fight the price axis.
-    if (indicators.stochRSI) {
+    // StochRSI and TTM Squeeze require real OHLC bars (not Renko bricks).
+    // When chartType === 'renko', skip them — they don't make sense on a
+    // brick chart. The chip toggles stay active in state so flipping back
+    // to candles restores the panes immediately.
+    const supportsOscillators = chartType === 'candles'
+
+    if (supportsOscillators && indicators.stochRSI) {
       const kSeries = ensure('stochK', () => {
         const s = chart.addLineSeries({
           color: COLORS.stochK, lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
@@ -240,9 +244,7 @@ export function Chart({ bars, chartType, renkoBox, indicators }: Props) {
       remove('stochK'); remove('stochD')
     }
 
-    // TTM Squeeze — histogram in another sub-pane (35-65%), with optional
-    // squeeze-on markers. We use one histogram series per LazyBear color.
-    if (indicators.ttmSqueeze) {
+    if (supportsOscillators && indicators.ttmSqueeze) {
       const ttm = ttmSqueeze(bars, 20, 2, 20, 1.5, 20)
       // Three separate histogram series so each can have its own color
       const green = ensure('ttmGreen', () => chart.addHistogramSeries({
