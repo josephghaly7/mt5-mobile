@@ -115,13 +115,15 @@ export function Chart({ bars, chartType, renkoBox, indicators }: Props) {
 
     if (chartType === 'renko') {
       const bricks = buildRenko(bars, renkoBox)
-      // Renko doesn't have volume, hide it
-      candleRef.current.setData(bricks.map(b => ({
-        time: b.time as UTCTimestamp,
+      // Lightweight-charts requires unique timestamps per series. Renko can
+      // emit multiple bricks per minute, so we use a synthetic sequential
+      // time index (1, 2, 3...) instead of bar.time. This loses the wall-clock
+      // time scale (use candles for that) but keeps the bricks aligned.
+      candleRef.current.setData(bricks.map((b, i) => ({
+        time: i as any,  // numeric index, no duplicates possible
         open: b.open, high: b.high, low: b.low, close: b.close
       })))
       volumeRef.current.setData([])
-      // Fit the visible range to the trailing N bricks
       const last = Math.max(0, bricks.length - 100)
       chart.timeScale().setVisibleLogicalRange({ from: last, to: last + 110 })
     } else {
