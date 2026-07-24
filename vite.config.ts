@@ -2,12 +2,15 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
-// GitHub Pages serves from /mt5-mobile/ subpath, so base must match.
-// For local dev we use '/' (Vite proxy makes /api and /ws hit the local FastAPI).
-const base = process.env.GITHUB_PAGES ? '/mt5-mobile/' : '/'
+// Base path resolution. The mobile PWA is served from two places:
+//   1. GitHub Pages at https://josephghaly7.github.io/mt5-mobile/  (build with GITHUB_PAGES=1)
+//   2. FastAPI on the VM at /mobile/ via the Cloudflare tunnel
+// The manifest's start_url and scope MUST match the base, otherwise iOS
+// install-to-home-screen creates a broken PWA pinned at the wrong URL.
+const BASE = process.env.GITHUB_PAGES ? '/mt5-mobile/' : '/mobile/'
 
 export default defineConfig({
-  base,
+  base: BASE,
   plugins: [
     react(),
     VitePWA({
@@ -21,8 +24,8 @@ export default defineConfig({
         background_color: '#0a0e14',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: base,
-        scope: base,
+        start_url: BASE,
+        scope: BASE,
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
