@@ -290,6 +290,7 @@ export function ttmSqueeze(
 
 export interface RenkoBrick {
   time: number
+  sourceTime: number
   open: number
   high: number
   low: number
@@ -314,9 +315,10 @@ export function buildRenko(bars: Bar[], boxSize: number): RenkoBrick[] {
   let nextTime = bars[0].time
   out.push({
     time: nextTime,
+    sourceTime: bars[0].time,
     open: lastClose,
-    high: lastClose + boxSize,
-    low: lastClose - boxSize,
+    high: lastClose,
+    low: lastClose,
     close: lastClose,
     direction: 'up',
   })
@@ -334,10 +336,11 @@ export function buildRenko(bars: Bar[], boxSize: number): RenkoBrick[] {
       nextTime = Math.max(bar.time + b, nextTime + 1)
       out.push({
         time: nextTime,
+        sourceTime: bar.time,
         open: lastClose,
         close: newClose,
-        high: Math.max(lastClose, newClose) + boxSize,
-        low: Math.min(lastClose, newClose) - boxSize,
+        high: Math.max(lastClose, newClose),
+        low: Math.min(lastClose, newClose),
         direction: stepDir,
       })
       lastClose = newClose
