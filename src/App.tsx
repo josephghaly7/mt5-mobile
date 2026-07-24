@@ -35,9 +35,7 @@ function defaultApiBase(): string {
 const DEFAULT_SYMBOLS: SymbolInfo[] = [
   { symbol: '@EP', display: 'EP' },
   { symbol: '@ENQ', display: 'ENQ' },
-  { symbol: '@ES', display: 'ES' },
-  { symbol: 'ES=F', display: 'ES (Yahoo)' },
-  { symbol: 'NQ=F', display: 'NQ (Yahoo)' }
+  { symbol: '@MES', display: 'MES' }
 ]
 
 export default function App() {
@@ -57,7 +55,7 @@ export default function App() {
   })
   const [renkoBox, setRenkoBox] = useState<number>(() => {
     const v = parseFloat(localStorage.getItem(STORAGE_KEY_RENKO_BOX) || '')
-    return isFinite(v) && v > 0 ? v : 2  // 2-point default for ES (~$50/brick)
+    return isFinite(v) && v > 0 ? v : 1  // 1-pt default — works for ES/MES/MNQ
   })
   const [bars, setBars] = useState<Bar[]>([])
   const [loading, setLoading] = useState(true)
