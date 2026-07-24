@@ -9,12 +9,23 @@ interface SymbolInfo {
 }
 
 // The mobile app resolves its API base at runtime:
-// - When opened from localhost (dev / tunnel direct), use '' so /api hits FastAPI directly
-// - When opened from GitHub Pages, the backend is on a different origin (cloudflared tunnel)
-//   so the user pastes the tunnel URL in the settings sheet.
+// - When opened from GitHub Pages (josephghaly7.github.io), the user must
+//   paste the tunnel URL in Settings — different origin from the API.
+// - When opened from anywhere else (FastAPI via tunnel, dev server, LAN),
+//   the page origin IS the API base, so we default to it automatically.
 const STORAGE_KEY_API = 'mt5-mobile.apiBase'
 const STORAGE_KEY_SYMBOL = 'mt5-mobile.symbol'
 const STORAGE_KEY_INDICATORS = 'mt5-mobile.indicators'
+
+function defaultApiBase(): string {
+  if (typeof window === 'undefined') return ''
+  const override = localStorage.getItem(STORAGE_KEY_API)
+  if (override) return override
+  // GitHub Pages: apiBase must be the tunnel URL (user sets it)
+  if (window.location.host.endsWith('.github.io')) return ''
+  // Otherwise: use page origin as the API base
+  return window.location.origin
+}
 
 const DEFAULT_SYMBOLS: SymbolInfo[] = [
   { symbol: '@EP', display: 'EP' },
@@ -25,7 +36,7 @@ const DEFAULT_SYMBOLS: SymbolInfo[] = [
 ]
 
 export default function App() {
-  const [apiBase, setApiBase] = useState(() => localStorage.getItem(STORAGE_KEY_API) || '')
+  const [apiBase, setApiBase] = useState(() => defaultApiBase())
   const [showSettings, setShowSettings] = useState(false)
   const [symbols] = useState(DEFAULT_SYMBOLS)
   const [active, setActive] = useState(() => localStorage.getItem(STORAGE_KEY_SYMBOL) || '@EP')
