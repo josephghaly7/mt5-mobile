@@ -18,6 +18,8 @@ const STORAGE_KEY_API = 'mt5-mobile.apiBase'
 const STORAGE_KEY_API_DISCOVERED = 'mt5-mobile.apiBaseDiscovered'
 const STORAGE_KEY_SYMBOL = 'mt5-mobile.symbol'
 const STORAGE_KEY_INDICATORS = 'mt5-mobile.indicators'
+const STORAGE_KEY_CHART_TYPE = 'mt5-mobile.chartType'
+const STORAGE_KEY_RENKO_BOX = 'mt5-mobile.renkoBox'
 
 function defaultApiBase(): string {
   if (typeof window === 'undefined') return ''
@@ -48,7 +50,14 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEY_INDICATORS)
       if (saved) return JSON.parse(saved)
     } catch {}
-    return { sma20: false, ema9: true, ema21: true, bb: false, vwap: true }
+    return { sma20: false, ema9: true, ema21: true, bb: false, vwap: true, stochRSI: false, ttmSqueeze: false }
+  })
+  const [chartType, setChartType] = useState<'candles' | 'renko'>(() => {
+    return (localStorage.getItem(STORAGE_KEY_CHART_TYPE) as 'candles' | 'renko') || 'candles'
+  })
+  const [renkoBox, setRenkoBox] = useState<number>(() => {
+    const v = parseFloat(localStorage.getItem(STORAGE_KEY_RENKO_BOX) || '')
+    return isFinite(v) && v > 0 ? v : 2  // 2-point default for ES (~$50/brick)
   })
   const [bars, setBars] = useState<Bar[]>([])
   const [loading, setLoading] = useState(true)
@@ -61,6 +70,8 @@ export default function App() {
   // Persist user choices
   useEffect(() => localStorage.setItem(STORAGE_KEY_SYMBOL, active), [active])
   useEffect(() => localStorage.setItem(STORAGE_KEY_INDICATORS, JSON.stringify(indicators)), [indicators])
+  useEffect(() => localStorage.setItem(STORAGE_KEY_CHART_TYPE, chartType), [chartType])
+  useEffect(() => localStorage.setItem(STORAGE_KEY_RENKO_BOX, String(renkoBox)), [renkoBox])
   // Don't auto-persist apiBase here. The override (typed in Settings) IS
   // persisted on every keystroke. Tunnel-discovered URLs are cached under
   // STORAGE_KEY_API_DISCOVERED and refreshed by the discover effect below.
@@ -235,9 +246,31 @@ export default function App() {
         {loading ? (
           <div className="loading">Loading bars…</div>
         ) : (
-          <Chart bars={bars} indicators={indicators} />
+          <Chart bars={bars} chartType={chartType} renkoBox={renkoBox} indicators={indicators} />
         )}
       </main>
+
+      <div className="chartbar">
+        <button onClick={() => setChartType(c => c === 'candles' ? 'renko' : 'candles')}
+                className={`chip ${chartType === 'renko' ? 'on' : ''}`}>
+          {chartType === 'renko' ? '🧱 Renko' : '🕯 Candles'}
+        </button>
+        {chartType === 'renko' && (
+          <label className="box-input">
+            box
+            <input
+              type="number"
+              step="0.25"
+              min="0.25"
+              value={renkoBox}
+              onChange={e => {
+                const v = parseFloat(e.target.value)
+                if (isFinite(v) && v > 0) setRenkoBox(v)
+              }}
+            />
+          </label>
+        )}
+      </div>
 
       <footer className="ftr">
         <button onClick={() => setIndicators((i: typeof indicators) => ({ ...i, ema9: !i.ema9 }))}
@@ -250,6 +283,10 @@ export default function App() {
                 className={`chip ${indicators.bb ? 'on' : ''}`}>BB</button>
         <button onClick={() => setIndicators((i: typeof indicators) => ({ ...i, vwap: !i.vwap }))}
                 className={`chip ${indicators.vwap ? 'on' : ''}`}>VWAP</button>
+        <button onClick={() => setIndicators((i: typeof indicators) => ({ ...i, stochRSI: !i.stochRSI }))}
+                className={`chip ${indicators.stochRSI ? 'on' : ''}`}>StochRSI</button>
+        <button onClick={() => setIndicators((i: typeof indicators) => ({ ...i, ttmSqueeze: !i.ttmSqueeze }))}
+                className={`chip ${indicators.ttmSqueeze ? 'on' : ''}`}>TTM</button>
       </footer>
 
       {showSettings && (
